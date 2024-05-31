@@ -1,20 +1,52 @@
 import pymysql
 import tkinter as tk
-from tkinter import ttk, simpledialog, font
+from tkinter import ttk, font
 import threading
 import time
-import json
 
 
-def load_config(file_path):
-    with open(file_path) as f:
-        return json.load(f)
+def load_config():
+    return {
+        "host": "210.107.198.214",
+        "user": "hisl_viewer",
+        "db": "HISL",
+        "password": "05rj0237",
+    }
 
 
 def fetch_data(cursor, query):
     cursor.execute(query)
     result = cursor.fetchone()
     return result[0] if result else None
+
+
+def fetch_sensor_data(cursor, sensor_data):
+    table_queries = {
+        "env_board": {
+            "Ambient Temperature": "temperature",
+            "Ambient Light": "ambient_light",
+            "Humidity": "humidity",
+            "Env Board Timestamp": "timestamp",
+        },
+        "monsoon": {
+            "Power": "power",
+            "Current": "current",
+            "Voltage": "voltage",
+            "Monsoon Timestamp": "timestamp",
+        },
+        "center309": {
+            "t1": "t1",
+            "t2": "t2",
+            "center309 Timestamp": "timestamp",
+        },
+    }
+
+    for table, queries in table_queries.items():
+        for key, field in queries.items():
+            query = (
+                f"SELECT {field} FROM {table} WHERE device_id = '{table}_1'"
+            )
+            sensor_data[key] = fetch_data(cursor, query)
 
 
 def sensor_data_monitor(db_config, interval, stop_event, sensor_data):
@@ -29,52 +61,7 @@ def sensor_data_monitor(db_config, interval, stop_event, sensor_data):
 
     while not stop_event.is_set():
         # Env Board 데이터 조회
-        query = (
-            "SELECT temperature FROM env_board WHERE device_id = 'env_board_1'"
-        )
-        sensor_data["Ambient Temperature"] = fetch_data(cursor, query)
-
-        query = "SELECT ambient_light FROM env_board WHERE device_id = 'env_board_1'"
-        sensor_data["Ambient Light"] = fetch_data(cursor, query)
-
-        query = (
-            "SELECT humidity FROM env_board WHERE device_id = 'env_board_1'"
-        )
-        sensor_data["Humidity"] = fetch_data(cursor, query)
-
-        query = (
-            "SELECT timestamp FROM env_board WHERE device_id = 'env_board_1'"
-        )
-        sensor_data["Env Board Timestamp"] = fetch_data(cursor, query)
-
-        # Monsoon 데이터 조회
-        query = "SELECT power FROM monsoon WHERE device_id = 'monsoon_1'"
-        sensor_data["Power"] = fetch_data(cursor, query)
-
-        query = "SELECT current FROM monsoon WHERE device_id = 'monsoon_1'"
-        sensor_data["Current"] = fetch_data(cursor, query)
-
-        query = "SELECT voltage FROM monsoon WHERE device_id = 'monsoon_1'"
-        sensor_data["Voltage"] = fetch_data(cursor, query)
-
-        query = "SELECT timestamp FROM monsoon WHERE device_id = 'monsoon_1'"
-        sensor_data["Monsoon Timestamp"] = fetch_data(cursor, query)
-
-        # center309 데이터 조회
-        query = (
-            "SELECT t1, t2, timestamp FROM center309 ORDER BY id DESC LIMIT 1"
-        )
-        result = fetch_data(cursor, query)
-        if result:
-            (
-                sensor_data["t1"],
-                sensor_data["t2"],
-                sensor_data["center309 Timestamp"],
-            ) = result
-        else:
-            sensor_data["t1"] = sensor_data["t2"] = sensor_data[
-                "center309 Timestamp"
-            ] = None
+        fetch_sensor_data(cursor, sensor_data)
 
         db.commit()  # 데이터 변경 사항 커밋
         time.sleep(interval)
@@ -113,7 +100,7 @@ def update_gui(sensor_data, labels):
             anchor="w",
         )
         labels["Monsoon Timestamp"].config(
-            text=f"Monsoon Timestamp: {sensor_data['Monsoon Timestamp']}",
+            text=f"Monsoon Timestamp: {sensor_data['Monsoon Timestamp']}\n",
             anchor="w",
         )
         labels["t1"].config(
@@ -148,12 +135,12 @@ def main():
     root.withdraw()  # 루트 윈도우 숨기기
 
     # 글씨 크기 설정
-    font_size = 18
-    custom_font = font.Font(size=font_size)
+    font_size = 14
+    custom_font = font.Font(family="Pretendard", size=font_size, weight="bold")
 
-    db_config = load_config("mysql_config.json")
+    db_config = load_config()
 
-    interval = 1.0  # 모니터링 간격 (초)
+    interval = 0.25  # 모니터링 간격 (초)
 
     sensor_data = {
         "Ambient Temperature": None,
@@ -164,6 +151,9 @@ def main():
         "Current": None,
         "Voltage": None,
         "Monsoon Timestamp": None,
+        "t1": None,
+        "t2": None,
+        "center309 Timestamp": None,
     }
 
     stop_event = threading.Event()
